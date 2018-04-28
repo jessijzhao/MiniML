@@ -135,7 +135,7 @@ let exp_to_abstract_string (exp : expr) : string =
     | LessThan -> "LessThan"
   in
   let sep (s : string list) : string =
-    List.fold_left (fun a s -> if a <> "" then a ^ ", " ^ s else s) "" s in
+    List.fold_left (fun a b -> if a <> "" then a ^ ", " ^ b else b) "" s in
   let rec convert (exp : expr) : string =
     match exp with
       | Var v -> "Var " ^ v
