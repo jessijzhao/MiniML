@@ -58,13 +58,11 @@ let test_exp_to_abstract_string () =
   assert(etas bit = "Binop(Times, Num 3, Var x)") ;
   assert(etas bie = "Binop(Equals, Var x, Num 2)") ;
   assert(etas bil = "Binop(LessThan, Var x, Num 7)") ;
-  assert(etas co =
-    "Conditional(Binop(Equals, Var x, Num 7), Bool true, Var y)") ;
+  assert(etas co = "Conditional(Binop(Equals, Var x, Num 7), Bool true, Var y)") ;
   assert(etas fu = "Fun(x, Binop(Plus, Var x, Var x))") ;
   assert(etas le = "Let(x, Num 1, Binop(Plus, Var x, Var x))") ;
   assert(etas re = "Letrec(x, Fun(y, Var x), Var x)") ;
-  assert(etas ap =
-    "Let(d, Fun(x, Binop(Times, Num 2, Var x)), App(Var d, Num 3))") ;
+  assert(etas ap = "Let(d, Fun(x, Binop(Times, Num 2, Var x)), App(Var d, Num 3))") ;
   assert(etas Raise = "Raise ") ;
   assert(etas Unassigned = "Unassigned") ;;
 
@@ -167,8 +165,7 @@ let test_env_module () =
   assert(vts two = "Val(2)") ;
   assert(vts y = "Val(y)") ;
   assert(vts closure = "Closure(x, [])") ;
-  assert(ets env =
-    "x -> Val(1), x2 -> Val(2), x3 -> Val(3), x4 -> Closure(x, []), []") ;;
+  assert(ets env = "x -> Val(1), x2 -> Val(2), x3 -> Val(3), x4 -> Closure(x, []), []") ;;
 
 
 let test_eval eval dynamic =
@@ -204,6 +201,7 @@ let test_eval eval dynamic =
   assert(test_e e1) ;
   if dynamic then assert(test_e dyn)
   else assert(test_e lex) ;;
+
 
 (* run all tests *)
 let run_tests () =
