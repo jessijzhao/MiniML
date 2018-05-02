@@ -107,13 +107,13 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
     | Binop (b, e1, e2) -> Binop(b, sub e1, sub e2)
     | Conditional (i, t, e) -> Conditional(sub i, sub t, sub e)
     | Fun (x, def) -> if x = var_name then exp
-                      else if not (SS.mem x (free_vars repl))
-                        then Fun(x, sub def)
+                      else if not (SS.mem x (free_vars repl)) then
+                        Fun(x, sub def)
                       else let x' = new_varname () in
                         Fun(x', sub (subst x (Var x') def))
     | Let (x, def, body) -> if x = var_name then Let(x, sub def, body)
-                            else if not (SS.mem x (free_vars repl))
-                              then Let(x, sub def, sub body)
+                            else if not (SS.mem x (free_vars repl)) then
+                              Let(x, sub def, sub body)
                             else let x' = new_varname () in
                               Let(x', sub def, sub (subst x (Var x') body))
     | Letrec (x, def, body) -> if x = var_name then exp
@@ -139,7 +139,8 @@ let binop_to_str (b : binop) (concrete : bool) : string =
   | LessThan -> either " < " "LessThan" ;;
 
 (* unop_to_str : unop -> string
-   Returns concrete or abstract string representation of unop *)
+   Returns concrete or abstract string representation of unop
+   Not strictly neccessary pattern match but avoids "underscore of hybris" *)
 let unop_to_str (u : unop) (concrete : bool) : string =
   match u with
   | Negate -> if concrete then "~-" else "Negate" ;;
@@ -156,7 +157,8 @@ let build (e : string) (s : string list) : string =
    Returns a concrete syntax string representation of the expr *)
 let exp_to_concrete_string (exp : expr) : string =
   let par (s : string) : string =
-    if String.length s < 2 then s else "(" ^ s ^ ")" in
+    if String.length s < 2 then s else "(" ^ s ^ ")"
+  in
   let append (lst : string list) : string =
     List.fold_left (fun a s -> a ^ s) "" lst in
   let rec etcs (exp : expr) : string =

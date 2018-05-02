@@ -105,96 +105,94 @@ let eval_t (exp : expr) (_env : Env.env) : Env.value =
   (* coerce the expr, unchanged, into a value *)
   Env.Val exp ;;
 
+(* A generic model evaluator for ALL OTHER MODEL EVALUATORS
+   If substitution is true, then we have the substitution evaluator, and if
+   dynamic is true then we have the dynamically scoped environment model
+   evaluator, if dynamic is false we have the lexically scoped one. *)
 
-(* Some COMMON EVALUATION functions for eval_s, eval_d, eval_l *)
+let rec evaluate (substitution : bool)
+                 (dynamic : bool)
+                 (exp : expr)
+                 (env : Env.env)
+               : Env.value =
+  let open Env in
 
-let eval_c (exp : expr) : expr =
+  (* eval function that takes an environment *)
+  let eval = evaluate substitution dynamic in
+
+  (* eval that ignores invironment, e.g. for substitution model *)
+  let eval' exp = eval exp env in
+
+  (* returns error with given string *)
+  let oops (str : string) =
+    raise (EvalError str) in
+
+  (* returns evaluated expression as expr instead of as Env.value *)
+  let eval_to_exp (value : expr) : expr =
+    match eval' value with
+    | Val exp -> exp
+    | _ -> oops "Type Error" in
+
+  (* where the actual evaluation will take place *)
   match exp with
-  | Num _ | Bool _ | Fun _ -> exp
+  | Var x -> if substitution then oops ("Unbound value " ^ x)
+             else lookup env x
+  | Num _ | Bool _ -> Val exp
   | Unop (u, e) -> (match u with
-                    | Negate -> Binop(Times, Num(-1), e))
+                    |Negate -> eval' (Binop(Times, Num ~-1, e)))
+  | Binop (b, e1, e2) ->
+     (match eval_to_exp e1, eval_to_exp e2 with
+      | Num n,  Num m  -> (match b with
+                           | Plus -> Val (Num (n + m))
+                           | Minus -> Val (Num (n - m))
+                           | Times -> Val (Num (n * m))
+                           | Equals -> Val (Bool (n = m))
+                           | LessThan -> Val (Bool (n < m)))
+      | Bool n, Bool m -> if b = Equals then Val (Bool (n = m))
+                          else oops "Bools can't do that binop!"
+      | _ -> oops "Binop called on invalid types")
+  | Conditional (i, t, e) ->
+     (match eval_to_exp i with
+      | Bool cond -> if cond then eval' t else eval' e
+      | _ -> raise (EvalError "Condition must be of type bool"))
+  | Fun _ -> if substitution || dynamic then Val exp
+             else close exp env
+  | Let (x, def, body) -> if substitution then
+                            eval' (subst x (eval_to_exp def) body)
+                          else
+                            eval body (extend env x (ref (eval' def)))
+  | Letrec (x, def, body) -> if substitution then
+                               let e = subst x (Letrec (x, def, Var x)) def in
+                               eval' (subst x (eval_to_exp e) body)
+                             else
+                               let x' = ref (Val Unassigned) in
+                               let env' = extend env x x' in
+                               x' := eval def env'; eval body env'
   | Raise -> raise EvalException
-  | Unassigned -> raise (EvalError "Unassigned")
-  | _ -> raise (EvalError "No common evaluation for this expression") ;;
-
-let binop_c (b : binop) (e1 : expr) (e2 : expr) : expr =
-  match e1, e2 with
-  | Num n,  Num m  -> (match b with
-                       | Plus -> Num (n + m)
-                       | Minus -> Num (n - m)
-                       | Times -> Num (n * m)
-                       | Equals -> Bool (n = m)
-                       | LessThan -> Bool (n < m))
-  | Bool n, Bool m -> (match b with
-                       | Equals -> Bool (n = m)
-                       | _ -> raise (EvalError "Bools can't do that binop"))
-  | _ -> raise (EvalError "Binop called on invalid types") ;;
-
-let cond_c (i : expr) (t : expr) (e : expr) : expr =
-  match i with
-  | Bool cond -> if cond then t else e
-  | _ -> raise (EvalError "Condition must be of type bool") ;;
-
+  | Unassigned -> oops "Unassigned"
+  | App (f, app) -> if substitution then
+                      (match eval_to_exp f with
+                       | Fun (x, def) -> eval' (subst x (eval_to_exp app) def)
+                       | _ -> oops "Nonfunction acannot be applied")
+                    else if dynamic then
+                      (match eval_to_exp f with
+                       | Fun (x, def) ->
+                          eval def (extend env x (ref (eval' app)))
+                       | _ -> oops "Nonfunction bcannot be applied")
+                    else
+                      (match eval' f with
+                       | Closure (Fun (x, def), env') ->
+                            eval def (extend env' x (ref (eval' app)))
+                       | _ -> oops "Nonfunction ccannot be applied");;
 
 (* The SUBSTITUTION MODEL evaluator *)
-
-let eval_s (exp : expr) (_env : Env.env) : Env.value =
-  let rec eval (exp : expr) : expr =
-    match exp with
-    | Num _ | Bool _ | Fun _ | Raise | Unassigned -> eval_c exp
-    | Var x -> raise (EvalError ("Unbound value " ^ x))
-    | Unop _ -> eval (eval_c exp)
-    | Binop (b, e1, e2) -> binop_c b (eval e1) (eval e2)
-    | Conditional (i, t, e) -> eval (cond_c (eval i) t e)
-    | Let (x, def, body) -> eval (subst x (eval def) body)
-    | Letrec (x, def, body) -> let e = subst x (Letrec (x, def, Var x)) def in
-                               eval (subst x (eval e) body)
-    | App (e1, e2) -> (match eval e1 with
-                       | Fun (v, e) -> eval (subst v (eval e2) e)
-                       | _ -> raise (EvalError "Nonfunction cannot be applied"))
-  in Env.Val (eval exp) ;;
-
-(* A bluepring for both the dynamically scoped and lexically scoped
-   ENVIRONMENT MODEL EVALUATOR*)
-
-let rec eval (dynamic : bool) (exp : expr) (env : Env.env)  : Env.value =
-  let open Env in
-  let eval' = eval dynamic in
-  let get_val (value : Env.value) : expr =
-    match value with
-    | Val exp -> exp
-    | _ -> raise (EvalError "Type Error")
-  in
-  match exp with
-  | Num _ | Bool _ | Raise | Unassigned -> Val (eval_c exp)
-  | Var x -> if dynamic then (match lookup env x with
-             | Val _ -> lookup env x
-             | Closure _ -> raise (EvalError ("Unbound value " ^ x)))
-             else lookup env x
-  | Unop _ -> eval' (eval_c exp) env
-  | Binop (b, e1, e2) -> Val (binop_c b (get_val (eval' e1 env))
-                                        (get_val (eval' e2 env)))
-  | Conditional (i, t, e) -> eval' (cond_c (get_val (eval' i env)) t e) env
-  | Fun _ -> if dynamic then Val (eval_c exp) else close exp env
-  | Let (x, def, body) -> eval' body (extend env x (ref (eval' def env)))
-  | Letrec (x, def, body) -> let x' = ref (Val Unassigned) in
-                             let env' = extend env x x' in
-                             x' := eval' def env';
-                             eval' body env'
-  | App (f, app) -> if dynamic then (match get_val (eval' f env) with
-                     | Fun (x, def) ->
-                        eval' def (extend env x (ref (eval' app env)))
-                     | _ -> raise (EvalError "Nonfunction cannot be applied"))
-                     else (match eval' f env with
-                     | Closure (Fun (x, def), env') ->
-                          eval' def (extend env' x (ref (eval' app env)))
-                     | _ -> raise (EvalError "Nonfunction cannot be applied"));;
+let eval_s = evaluate true true ;;
 
 (* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator  *)
-let eval_d = eval true ;;
+let eval_d = evaluate false true ;;
 
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator *)
-let eval_l = eval false ;;
+let eval_l = evaluate false false ;;
 
 (* Connecting the evaluators to the external world. The REPL in
    miniml.ml uses a call to the single function evaluate defined
