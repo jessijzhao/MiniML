@@ -64,20 +64,19 @@ let vars_of_list : string list -> varidset =
    exp *)
 let rec free_vars (exp : expr) : varidset =
   let free_union (lst : expr list) : varidset =
-    List.fold_left (fun set exp -> SS.union set (free_vars exp)) SS.empty lst in
+    List.fold_left (fun set el -> SS.union set (free_vars el)) SS.empty lst in
   match exp with
-  | Var x -> SS.singleton x
-  | Num _ | Bool _ -> SS.empty
-  | Unop (_, e) -> free_vars e
-  | Binop (_, e1, e2) -> free_union [e1; e2]
+  | Var x                 -> SS.singleton x
+  | Num _ | Bool _        -> SS.empty
+  | Unop (_, e)           -> free_vars e
+  | Binop (_, e1, e2)     -> free_union [e1; e2]
   | Conditional (i, t, e) -> free_union [i; t; e]
-  | Fun (x, def) -> SS.remove x (free_vars def)
-  | Let (x, def, body) -> SS.union (SS.remove x (free_vars body))
-                          (free_vars def)
+  | Fun (x, def)          -> SS.remove x (free_vars def)
+  | Let (x, def, body)    -> SS.union (SS.remove x (free_vars body))
+                             (free_vars def)
   | Letrec (x, def, body) -> SS.remove x (free_union [def; body])
-  | App (f, app) -> free_union [f; app]
-  | Raise | Unassigned -> SS.empty
-;;
+  | App (f, app)          -> free_union [f; app]
+  | Raise | Unassigned    -> SS.empty ;;
 
 (* new_varname : unit -> varid
    Return a fresh variable, constructed with a running counter a la
@@ -101,25 +100,29 @@ let new_varname : unit -> varid =
 let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
   let rec sub (exp : expr) : expr =
     match exp with
-    | Var x -> if x = var_name then repl else exp
-    | Num _ | Bool _ -> exp
-    | Unop (u, e) -> Unop(u, sub e)
-    | Binop (b, e1, e2) -> Binop(b, sub e1, sub e2)
+    | Var x                 -> if x = var_name then repl else exp
+    | Num _ | Bool _        -> exp
+    | Unop (u, e)           -> Unop(u, sub e)
+    | Binop (b, e1, e2)     -> Binop(b, sub e1, sub e2)
     | Conditional (i, t, e) -> Conditional(sub i, sub t, sub e)
-    | Fun (x, def) -> if x = var_name then exp
-                      else if not (SS.mem x (free_vars repl)) then
-                        Fun(x, sub def)
-                      else let x' = new_varname () in
-                        Fun(x', sub (subst x (Var x') def))
-    | Let (x, def, body) -> if x = var_name then Let(x, sub def, body)
-                            else if not (SS.mem x (free_vars repl)) then
-                              Let(x, sub def, sub body)
-                            else let x' = new_varname () in
-                              Let(x', sub def, sub (subst x (Var x') body))
+    | Fun (x, def)          -> if x = var_name then
+                                 exp
+                               else if not (SS.mem x (free_vars repl)) then
+                                 Fun(x, sub def)
+                               else
+                                 let x' = new_varname () in
+                                 Fun(x', sub (subst x (Var x') def))
+    | Let (x, def, body)    -> if x = var_name then
+                                 Let(x, sub def, body)
+                               else if not (SS.mem x (free_vars repl)) then
+                                 Let(x, sub def, sub body)
+                               else
+                                 let x' = new_varname () in
+                                 Let(x', sub def, sub (subst x (Var x') body))
     | Letrec (x, def, body) -> if x = var_name then exp
                                else Letrec(x, sub def, sub body)
-    | Raise | Unassigned -> exp
-    | App (f, app) -> App(sub f, sub app)
+    | Raise | Unassigned    -> exp
+    | App (f, app)          -> App(sub f, sub app)
   in
   sub exp ;;
 (*......................................................................
@@ -148,10 +151,10 @@ let unop_to_str (u : unop) (concrete : bool) : string =
 (* build : string -> string list -> string
    Builds abstract string representation from operator in string form and
    arguments as a list of strings *)
-let build (e : string) (s : string list) : string =
+let build (op : string) (arguments : string list) : string =
   let separate =
-    List.fold_left (fun a s -> if a <> "" then a ^ ", " ^ s else s) "" in
-  e ^ "(" ^ separate s ^ ")" ;;
+    List.fold_left (fun ac st -> if ac <> "" then ac ^ ", " ^ st else st) "" in
+  op ^ "(" ^ separate arguments ^ ")" ;;
 
 (* exp_to_concrete_string : expr -> string
    Returns a concrete syntax string representation of the expr *)
@@ -163,22 +166,22 @@ let exp_to_concrete_string (exp : expr) : string =
     List.fold_left (fun a s -> a ^ s) "" lst in
   let rec etcs (exp : expr) : string =
     match exp with
-    | Var x -> x
-    | Num n -> string_of_int n
-    | Bool b -> string_of_bool b
-    | Unop (u, e) -> append [unop_to_str u true; par (etcs e)]
-    | Binop (b, e1, e2) -> append [par (etcs e1); binop_to_str b true;
-                                   par (etcs e2)]
+    | Var x                 -> x
+    | Num n                 -> string_of_int n
+    | Bool b                -> string_of_bool b
+    | Unop (u, e)           -> append [unop_to_str u true; par (etcs e)]
+    | Binop (b, e1, e2)     -> append [par (etcs e1); binop_to_str b true;
+                                       par (etcs e2)]
     | Conditional (i, t, e) -> append ["if "; etcs i; " then "; etcs t;
                                        " else "; etcs e]
-    | Fun (x, def) -> append ["fun "; x; " -> "; etcs def]
-    | Let (x, def, body) -> append ["let "; x; " = "; etcs def;
-                                    " in "; etcs body]
+    | Fun (x, def)          -> append ["fun "; x; " -> "; etcs def]
+    | Let (x, def, body)    -> append ["let "; x; " = "; etcs def;
+                                       " in "; etcs body]
     | Letrec (x, def, body) -> append ["let rec "; x; " = "; etcs def;
                                        " in "; etcs body]
-    | Raise -> "Raise "
-    | Unassigned -> "Unassigned"
-    | App (f, app) -> append [par (etcs f); " "; par (etcs app)]
+    | Raise                 -> "Raise "
+    | Unassigned            -> "Unassigned"
+    | App (f, app)          -> append [par (etcs f); " "; par (etcs app)]
   in
   etcs exp ;;
 
@@ -187,18 +190,18 @@ let exp_to_concrete_string (exp : expr) : string =
 let exp_to_abstract_string (exp : expr) : string =
   let rec etas (exp : expr) : string =
     match exp with
-      | Var x -> "Var " ^ x
-      | Num n -> "Num " ^ string_of_int n
-      | Bool b -> "Bool " ^ string_of_bool b
-      | Unop (u, e) -> build "Unop" [unop_to_str u false; etas e]
-      | Binop (b, e1, e2) -> build "Binop" [binop_to_str b false;
-                                            etas e1; etas e2]
+      | Var x                 -> "Var " ^ x
+      | Num n                 -> "Num " ^ string_of_int n
+      | Bool b                -> "Bool " ^ string_of_bool b
+      | Unop (u, e)           -> build "Unop" [unop_to_str u false; etas e]
+      | Binop (b, e1, e2)     -> build "Binop" [binop_to_str b false;
+                                                etas e1; etas e2]
       | Conditional (i, t, e) -> build "Conditional" [etas i; etas t; etas e]
-      | Fun (x, def) -> build "Fun" [x; etas def]
-      | Let (x, def, body) -> build "Let" [x; etas def; etas body]
+      | Fun (x, def)          -> build "Fun" [x; etas def]
+      | Let (x, def, body)    -> build "Let" [x; etas def; etas body]
       | Letrec (x, def, body) -> build "Letrec" [x; etas def; etas body]
-      | Raise -> "Raise "
-      | Unassigned -> "Unassigned"
-      | App (f, app) -> build "App" [etas f; etas app]
+      | Raise                 -> "Raise "
+      | Unassigned            -> "Unassigned"
+      | App (f, app)          -> build "App" [etas f; etas app]
   in
   etas exp ;;

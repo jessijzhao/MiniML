@@ -189,20 +189,24 @@ let test_eval eval dynamic lexical =
     let env = Env.create () in
     match str with
     | exp , sol -> eval (ste exp) env = Env.Val (ste sol) in
-  let test_error (exp : expr) : bool =
+  let test_error (exp : expr) (str : string) : bool =
     let env = Env.create () in
     try
       eval exp env = Env.Val (ste "let x = 2 in x;;")
     with
-      EvalError _ | EvalException-> true in
-  assert(test_error (ste "x;;")) ;
-  assert(test_error (ste "3 + x;;")) ;
-  assert(test_error (ste "true + false;;")) ;
-  assert(test_error (ste "if 3 then 2 else 1;;")) ;
-  assert(test_error (ste "let f = fun x -> 2*x in f f 1;;")) ;
-  assert(test_error (ste ra)) ;
-  assert(test_error Raise) ;
-  assert(test_error Unassigned) ;
+      | EvalError err  -> print_endline err; err=str (* to check that errors are wellformed *)
+      | EvalException -> true in
+  assert(test_error (ste "x;;") "Unbound variable x") ;
+  assert(test_error (ste "3 + x;;") "Unbound variable x") ;
+  assert(test_error (ste "true + false;;") "Bools can't do that binop!") ;
+  let error = "Condition of type bool expected" in
+  assert(test_error (ste "if 3 then 2 else 1;;") error) ;
+  let berror = "Binop called on invalid types" in
+  if not dynamic && not lexical then
+    assert(test_error (ste "let f = fun x -> 2*x in f f 1;;") berror) ;
+  assert(test_error (ste ra) "") ;
+  assert(test_error Raise "") ;
+  assert(test_error Unassigned "Unassigned") ;
   assert(test_e nu) ;
   assert(test_e bo) ;
   assert(test_e un) ;
@@ -222,12 +226,12 @@ let test_eval eval dynamic lexical =
   assert(test_e e1) ;
   if dynamic then assert(test_e dyn)
   else assert(test_e lex) ;
-  if dynamic then assert(test_error (ste exp'))
+  if dynamic then assert(test_error (ste exp') "Unbound variable f")
   else assert(test_e lex') ;
-  if dynamic then assert(test_error (ste exp''))
+  if dynamic then assert(test_error (ste exp'') "Unbound variable x")
   else assert(test_e lex'') ;
   if dynamic then assert(test_e dyn3)
-  else assert(test_error (ste exp3)) ;;
+  else assert(test_error (ste exp3) "Unbound variable f") ;;
 
 (* run all tests *)
 let run_tests () =

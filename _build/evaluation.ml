@@ -71,7 +71,8 @@ module Env : Env_type =
       | Val exp -> build "Val" [etcs exp]
       | Closure (exp, env) -> if printenvp then
                                 build "Closure" [etcs exp; env_to_string env]
-                              else build "Closure" [etcs exp; "env"]
+                              else
+                                build "Closure" [etcs exp; "env"]
 
     (* Returns a printable string representation of an environment *)
     and env_to_string (env : env) : string =
@@ -117,81 +118,73 @@ let rec evaluate (substitution : bool)
                : Env.value =
   let open Env in
 
-  (* eval function that takes an environment *)
-  let eval = evaluate substitution dynamic in
-
-  (* eval that ignores invironment, e.g. for substitution model *)
-  let eval' exp = eval exp env in
-
   (* returns error with given string *)
   let oops (str : string) =
     raise (EvalError str) in
 
+  (* eval function that takes an environment *)
+  let eval = evaluate substitution dynamic in
+
+  (* eval that ignores invironment, e.g. for substitution model *)
+  let eval' (exp : expr) : Env.value =
+    eval exp env in
+
   (* returns evaluated expression as expr instead of as Env.value *)
-  let eval_to_exp (value : expr) : expr =
-    match eval' value with
-    | Val exp -> exp
+  let eval_e (exp : expr) : expr =
+    match eval' exp with
+    | Val exp' -> exp'
     | _ -> oops "Type Error" in
 
   (* where the actual evaluation will take place *)
   match exp with
-  | Var x -> if substitution then oops ("Unbound variable " ^ x)
-             else lookup env x
+  | Var x -> lookup env x
   | Num _ | Bool _ -> Val exp
-  | Unop (u, e) -> (match u with
-                    |Negate -> eval' (Binop(Times, Num ~-1, e)))
+  | Unop (u, e) ->
+     (match u with
+      |Negate -> eval' (Binop(Times, Num ~-1, e)))
   | Binop (b, e1, e2) ->
-     (match eval_to_exp e1, eval_to_exp e2 with
+     (match eval_e e1, eval_e e2 with
       | Num n,  Num m  -> (match b with
-                           | Plus -> Val (Num (n + m))
-                           | Minus -> Val (Num (n - m))
-                           | Times -> Val (Num (n * m))
-                           | Equals -> Val (Bool (n = m))
-                           | LessThan -> Val (Bool (n < m)))
-      | Bool n, Bool m -> if b = Equals then Val (Bool (n = m))
-                          else oops "Bools can't do that sort of binop!"
+                           | Plus -> Val(Num (n + m))
+                           | Minus -> Val(Num (n - m))
+                           | Times -> Val(Num (n * m))
+                           | Equals -> Val(Bool (n = m))
+                           | LessThan -> Val(Bool (n < m)))
+      | Bool n, Bool m -> if b = Equals then Val(Bool (n = m))
+                          else oops "Bools can't do that binop!"
       | _ -> oops "Binop called on invalid types")
   | Conditional (i, t, e) ->
-     (match eval_to_exp i with
+     (match eval_e i with
       | Bool cond -> if cond then eval' t else eval' e
-      | _ -> raise (EvalError "Condition of type bool expected "))
-  | Fun _ -> if substitution || dynamic then Val exp
-             else close exp env
-  | Let (x, def, body) -> if substitution then
-                            eval' (subst x (eval_to_exp def) body)
-                          else
-                            eval body (extend env x (ref (eval' def)))
-  | Letrec (x, def, body) -> if substitution then
-                               (* let def' = subst x (Letrec(x, def, Var x)) def in
-                               eval' (subst x (eval_to_exp def') body) *)
-                              let (recfun_id, recfun_body) =
-                                (match def with
-                                | Fun(recfun_id, recfun_body) -> recfun_id, recfun_body
-                                | _ -> raise (EvalError "cannot use letrec with a non function")) in
-                              let newvar = new_varname () in
-                              let newrecfun = Fun(newvar, subst recfun_id (Var newvar) recfun_body) in
-                              let newrec = subst x (Letrec(x, newrecfun, Var x)) def in
-                              eval' (subst x newrec body)
-                             else
-                               let x' = ref (Val Unassigned) in
-                               let env' = extend env x x' in
-                               x' := eval def env'; eval body env'
+      | _ -> oops "Condition of type bool expected")
+  | Fun _ ->
+     if substitution || dynamic then Val exp
+     else close exp env
+  | Let (x, def, body) ->
+     if substitution then eval' (subst x (eval_e def) body)
+     else eval body (extend env x (ref (eval' def)))
+  | Letrec (x, def, body) ->
+     if substitution then
+       let def' = subst x (Letrec(x, def, Var x)) def in
+       eval' (subst x (eval_e def') body)
+     else
+       let x' = ref (Val Unassigned) in
+       let env' = extend env x x' in
+       x' := eval def env'; eval body env'
   | Raise -> raise EvalException
   | Unassigned -> oops "Unassigned"
-  | App (f, app) -> if substitution then
-                      (match eval_to_exp f with
-                       | Fun (x, def) -> eval' (subst x (eval_to_exp app) def)
-                       | _ -> oops "Nonfunction acannot be applied")
-                    else if dynamic then
-                      (match eval_to_exp f with
-                       | Fun (x, def) ->
-                          eval def (extend env x (ref (eval' app)))
-                       | _ -> oops "Nonfunction bcannot be applied")
-                    else
-                      (match eval' f with
-                       | Closure (Fun (x, def), env') ->
-                            eval def (extend env' x (ref (eval' app)))
-                       | _ -> oops "Nonfunction ccannot be applied") ;;
+  | App (f, app) ->
+     if substitution || dynamic then
+       (match eval_e f with
+        | Fun (x, def) ->
+           if substitution then eval' (subst x (eval_e app) def)
+           else eval def (extend env x (ref (eval' app)))
+        | _ -> oops "Nonfunction acannot be applied")
+     else
+       (match eval' f with
+        | Closure (Fun (x, def), env') ->
+           eval def (extend env' x (ref (eval' app)))
+        | _ -> oops "Nonfunction ccannot be applied") ;;
 
 (* The SUBSTITUTION MODEL evaluator *)
 let eval_s = evaluate true true ;;
@@ -206,4 +199,4 @@ let eval_l = evaluate false false ;;
    miniml.ml uses a call to the single function evaluate defined
    here. *)
 
-let evaluate = eval_d ;;
+let evaluate = eval_s ;;
