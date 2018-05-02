@@ -61,6 +61,7 @@ let repl () =
 (* Run REPL if called from command line *)
 
 try
-  let _ = Str.search_forward (Str.regexp "miniml\\.\\(byte\\|native\\)") (Sys.argv.(0)) 0 in
+  let _ = Str.search_forward (Str.regexp "miniml\\.\\(byte\\|native\\)")
+          (Sys.argv.(0)) 0 in
   repl ()
 with Not_found -> () ;;
