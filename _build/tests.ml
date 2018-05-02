@@ -164,14 +164,23 @@ let fu' = ste "fun x -> x + x;;" ;;
 let fu'' = "Closure(fun x -> x + x, [])" ;;
 let le = ("let x = 1 in x + x;;", "2;;") ;;
 let le' = ("let f = fun x -> x in f f 3;;", "3;;") ;;
-let re = ("let rec f = fun x -> if x=0 then 1 else x*f(x-1) in f 4;;", "24;;");;
-let re' = ("let rec f = fun x -> if x=0 then x else f(x-1) in f 2 ;;", "0;;") ;;
+let le'' = ("let x = 2 in let x = 4 in x;;", "4;;") ;;
+let re = ("let rec f = fun x-> if x=0 then 1 else x*f(x-1) in f 4;;", "24;;") ;;
+let re' = ("let rec f = fun x-> if x=0 then x else f(x-1) in f 2 ;;", "0;;") ;;
+let re'' = ("let rec f=(fun x->if x=0 then 0 else 1+f (x-1)) in f 1;;","1;;") ;;
 let ap = ("let double = fun x -> 2 * x in double (double 3);;", "12;;") ;;
+let ra = ("if 3 < 4 then true else true;;")
 let e = ("let square = fun x -> x * x in let y = 3 in square y;;", "9;;") ;;
 let e1 = ("let i=fun x->x in let s=fun x->x*x in let y=3 in i s y;;", "9;;") ;;
 let exp = "let x = 1 in let f = fun y -> x + y in let x = 2 in f 3;;" ;;
 let lex = (exp, "4;;") ;;
 let dyn = (exp, "5;;") ;;
+let exp' = ("let t=fun f->fun x ->f (f x) in let s=fun x -> x*x in t s 3;;") ;;
+let lex' = (exp', "81;;") ;;
+let exp'' = "let f = fun x -> fun y -> x + y in f 2 3;;" ;;
+let lex'' = (exp', "81;;") ;;
+let exp3 = "let f = fun n -> if n = 0 then 1 else n * f (n-1) in f 2;;" ;;
+let dyn3 = (exp3, "2;;") ;;
 
 (* testst the eval function it is called with as dynamic or lexical scope *)
 let test_eval eval dynamic lexical =
@@ -189,6 +198,8 @@ let test_eval eval dynamic lexical =
   assert(test_error (ste "3 + x;;")) ;
   assert(test_error (ste "true + false;;")) ;
   assert(test_error (ste "if 3 then 2 else 1;;")) ;
+  assert(test_error (ste "let f = fun x -> 2*x in f f 1;;")) ;
+  assert(test_error (ste ra)) ;
   assert(test_error Raise) ;
   assert(test_error Unassigned) ;
   assert(test_e nu) ;
@@ -201,12 +212,21 @@ let test_eval eval dynamic lexical =
   else assert(Env.value_to_string (eval fu' (Env.create ())) = fu'') ;
   assert(test_e le) ;
   assert(test_e le') ;
+  assert(test_e le'') ;
   assert(test_e re) ;
+  assert(test_e re') ;
+  assert(test_e re'') ;
   assert(test_e ap) ;
   assert(test_e e) ;
   assert(test_e e1) ;
   if dynamic then assert(test_e dyn)
-  else assert(test_e lex) ;;
+  else assert(test_e lex) ;
+  if dynamic then assert(test_error (ste exp'))
+  else assert(test_e lex') ;
+  if dynamic then assert(test_error (ste exp''))
+  else assert(test_e lex'') ;
+  if dynamic then assert(test_e dyn3)
+  else assert(test_error (ste exp3)) ;;
 
 (* run all tests *)
 let run_tests () =

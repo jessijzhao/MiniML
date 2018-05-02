@@ -52,7 +52,7 @@ module Env : Env_type =
       try
         !(List.assoc varname env)
       with
-        Not_found -> raise (EvalError ("Unbound variable" ^ varname )) ;;
+        Not_found -> raise (EvalError ("Unbound variable " ^ varname )) ;;
 
     (* Returns a new environment just like env except that it maps the
        variable varid to loc *)
@@ -135,7 +135,7 @@ let rec evaluate (substitution : bool)
 
   (* where the actual evaluation will take place *)
   match exp with
-  | Var x -> if substitution then oops ("Unbound value " ^ x)
+  | Var x -> if substitution then oops ("Unbound variable " ^ x)
              else lookup env x
   | Num _ | Bool _ -> Val exp
   | Unop (u, e) -> (match u with
@@ -149,12 +149,12 @@ let rec evaluate (substitution : bool)
                            | Equals -> Val (Bool (n = m))
                            | LessThan -> Val (Bool (n < m)))
       | Bool n, Bool m -> if b = Equals then Val (Bool (n = m))
-                          else oops "Bools can't do that binop!"
+                          else oops "Bools can't do that sort of binop!"
       | _ -> oops "Binop called on invalid types")
   | Conditional (i, t, e) ->
      (match eval_to_exp i with
       | Bool cond -> if cond then eval' t else eval' e
-      | _ -> raise (EvalError "Condition must be of type bool"))
+      | _ -> raise (EvalError "Condition of type bool expected "))
   | Fun _ -> if substitution || dynamic then Val exp
              else close exp env
   | Let (x, def, body) -> if substitution then
@@ -162,8 +162,16 @@ let rec evaluate (substitution : bool)
                           else
                             eval body (extend env x (ref (eval' def)))
   | Letrec (x, def, body) -> if substitution then
-                               let def' = subst x (Letrec(x, def, Var x)) def in
-                               eval' (subst x (eval_to_exp def') body)
+                               (* let def' = subst x (Letrec(x, def, Var x)) def in
+                               eval' (subst x (eval_to_exp def') body) *)
+                              let (recfun_id, recfun_body) =
+                                (match def with
+                                | Fun(recfun_id, recfun_body) -> recfun_id, recfun_body
+                                | _ -> raise (EvalError "cannot use letrec with a non function")) in
+                              let newvar = new_varname () in
+                              let newrecfun = Fun(newvar, subst recfun_id (Var newvar) recfun_body) in
+                              let newrec = subst x (Letrec(x, newrecfun, Var x)) def in
+                              eval' (subst x newrec body)
                              else
                                let x' = ref (Val Unassigned) in
                                let env' = extend env x x' in
@@ -183,7 +191,7 @@ let rec evaluate (substitution : bool)
                       (match eval' f with
                        | Closure (Fun (x, def), env') ->
                             eval def (extend env' x (ref (eval' app)))
-                       | _ -> oops "Nonfunction ccannot be applied");;
+                       | _ -> oops "Nonfunction ccannot be applied") ;;
 
 (* The SUBSTITUTION MODEL evaluator *)
 let eval_s = evaluate true true ;;
@@ -198,4 +206,4 @@ let eval_l = evaluate false false ;;
    miniml.ml uses a call to the single function evaluate defined
    here. *)
 
-let evaluate = eval_l ;;
+let evaluate = eval_s ;;
