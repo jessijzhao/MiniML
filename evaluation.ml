@@ -105,21 +105,8 @@ let eval_t (exp : expr) (_env : Env.env) : Env.value =
   (* coerce the expr, unchanged, into a value *)
   Env.Val exp ;;
 
-(* Some SHARED HELPER FUNCTIONS for eval_s, eval_d, and eval_l*)
-let binop_int (b : binop) (n : int) (m : int) : expr =
-  match b with
-  | Plus -> Num (n + m)
-  | Minus -> Num (n - m)
-  | Times -> Num (n * m)
-  | Equals -> Bool (n = m)
-  | LessThan -> Bool (n < m)
 
-let binop_bool (b : binop) (n : bool) (m : bool) : expr =
-  match b with
-  | Equals -> Bool (n = m)
-  | _ -> raise (EvalError "Binop called on invalid types")
-
-(* COMMON EVALUATION function across all models *)
+(* Some COMMON EVALUATION functions for eval_s, eval_d, eval_l *)
 
 let eval_c (exp : expr) : expr =
   match exp with
@@ -130,94 +117,88 @@ let eval_c (exp : expr) : expr =
   | Unassigned -> raise (EvalError "Unassigned")
   | _ -> raise (EvalError "No common evaluation for this expression") ;;
 
+let binop_c (b : binop) (e1 : expr) (e2 : expr) : expr =
+  match e1, e2 with
+  | Num n,  Num m  -> (match b with
+                       | Plus -> Num (n + m)
+                       | Minus -> Num (n - m)
+                       | Times -> Num (n * m)
+                       | Equals -> Bool (n = m)
+                       | LessThan -> Bool (n < m))
+  | Bool n, Bool m -> (match b with
+                       | Equals -> Bool (n = m)
+                       | _ -> raise (EvalError "Bools can't do that binop"))
+  | _ -> raise (EvalError "Binop called on invalid types") ;;
+
+let cond_c (i : expr) (t : expr) (e : expr) : expr =
+  match i with
+  | Bool cond -> if cond then t else e
+  | _ -> raise (EvalError "Condition must be of type bool") ;;
+
+
 (* The SUBSTITUTION MODEL evaluator *)
 
 let eval_s (exp : expr) (_env : Env.env) : Env.value =
   let rec eval (exp : expr) : expr =
     match exp with
-    | Var v -> raise (EvalError ("Unbound value " ^ v))
+    | Num _ | Bool _ | Fun _ | Raise | Unassigned -> eval_c exp
+    | Var x -> raise (EvalError ("Unbound value " ^ x))
     | Unop _ -> eval (eval_c exp)
-    | Binop (b, e1, e2) -> (match (eval e1, eval e2) with
-                            | Num n, Num m -> binop_int b n m
-                            | Bool n, Bool m -> binop_bool b n m
-                            | _ -> raise (EvalError "Type Error"))
-    | Conditional (e1, e2, e3) -> (match eval e1 with
-                                   | Bool b -> if b then eval e2 else eval e3
-                                   | _ -> raise (EvalError "Expression of type bool was expected"))
-    | Let (v, e1, e2) -> eval (subst v (eval e1) e2)
-    | Letrec (v, e1, e2) -> let e = eval (subst v (Letrec (v, e1, Var v)) e1) in
-                            eval (subst v e e2)
+    | Binop (b, e1, e2) -> binop_c b (eval e1) (eval e2)
+    | Conditional (i, t, e) -> eval (cond_c (eval i) t e)
+    | Let (x, def, body) -> eval (subst x (eval def) body)
+    | Letrec (x, def, body) -> let e = subst x (Letrec (x, def, Var x)) def in
+                               eval (subst x (eval e) body)
     | App (e1, e2) -> (match eval e1 with
                        | Fun (v, e) -> eval (subst v (eval e2) e)
                        | _ -> raise (EvalError "Nonfunction cannot be applied"))
-    | Num _ | Bool _ | Fun _ | Raise | Unassigned -> eval_c exp
   in Env.Val (eval exp) ;;
 
-(* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator  *)
+(* A blueprint for both the dynamically scoped and lexically scoped
+   ENVIRONMENT MODEL EVALUATOR *)
 
-let eval_d (exp : expr) (env : Env.env) : Env.value =
+let rec eval (subst : bool) (dynamic : bool) (exp : expr) (env : Env.env) : Env.value =
   let open Env in
-  let rec eval (exp : expr) (env: Env.env) : expr =
-    match exp with
-    | Num _ | Bool _ | Fun _ | Raise | Unassigned -> eval_c exp
-    | Var v -> (match lookup env v with
-               | Val (expr) -> expr
-               | _ -> raise (EvalError ("Unbound value " ^ v)))
-    | Unop _ -> eval (eval_c exp) env
-    | Binop (bi, e1, e2) -> (match (eval e1 env, eval e2 env) with
-                            | Num a, Num b -> binop_int bi a b
-                            | Bool a, Bool b -> binop_bool bi a b
-                            | _ -> raise (EvalError "Type Error"))
-    | Conditional (e1, e2, e3) -> (match eval e1 env with
-                                   | Bool b -> if b then eval e2 env else eval e3 env
-                                   | _ -> raise (EvalError "Expression of type bool was expected"))
-    | Let (v, e1, e2) -> eval e2 (extend env v (ref (Val (eval e1 env))))
-    | Letrec (v, e1, e2) -> let env' = extend env v (ref (Val Unassigned)) in
-                            let e1' = eval e1 env' in
-                            let env'' = extend env' v (ref (Val e1')) in
-                            eval e2 env''
-    | App (e1, e2) -> (match eval e1 env with
-                       | Fun (v, e) -> eval e (extend env v (ref (Val (eval e2 env))))
-                       | _ -> raise (EvalError "Nonfunction cannot be applied"))
+  let eval' = eval subst dynamic in
+  let get_val (value : Env.value) : expr =
+    match value with
+    | Val exp -> exp
+    | _ -> raise (EvalError "Type Error")
+  in
+  match exp with
+  | Num _ | Bool _ | Raise | Unassigned -> Val (eval_c exp)
+  | Var x -> if dynamic then (match lookup env x with
+             | Val _ -> lookup env x
+             | Closure _ -> raise (EvalError ("Unbound value " ^ x)))
+             else lookup env x
+  | Unop _ -> eval' (eval_c exp) env
+  | Binop (b, e1, e2) -> Val (binop_c b (get_val (eval' e1 env))
+                                        (get_val (eval' e2 env)))
+  | Conditional (i, t, e) -> eval' (cond_c (get_val (eval' i env)) t e) env
+  | Fun _ -> if dynamic then Val (eval_c exp) else close exp env
+  | Let (x, def, body) -> eval' body (extend env x (ref (eval' def env)))
+  | Letrec (x, def, body) -> let x' = ref (Val Unassigned) in
+                             let env' = extend env x x' in
+                             x' := eval' def env';
+                             eval' body env'
+  | App (f, app) -> if dynamic then (match get_val (eval' f env) with
+                     | Fun (x, def) ->
+                        eval' def (extend env x (ref (eval' app env)))
+                     | _ -> raise (EvalError "Nonfunction cannot be applied"))
+                     else (match eval' f env with
+                     | Closure (Fun (x, def), env') ->
+                          eval' def (extend env' x (ref (eval' app env)))
+                     | _ -> raise (EvalError "Nonfunction cannot be applied"));;
 
-  in Val (eval exp env) ;;
+let eval_s = eval true true ;;
+(* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator  *)
+let eval_d = eval false true ;;
 
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator *)
-
-let eval_l (exp : expr) (env : Env.env) : Env.value =
-  let open Env in
-  let rec eval (exp : expr) (env: Env.env) : expr =
-    match exp with
-    | Var v -> (match lookup env v with
-               | Val (expr) -> expr
-               | _ -> raise (EvalError ("Unbound value " ^ v)))
-    | Unop (u, e) -> (match u with
-                      | Negate -> eval (Binop(Times, Num(-1), e)) env)
-    | Binop (bi, e1, e2) -> (match (eval e1 env, eval e2 env) with
-                            | Num a, Num b -> binop_int bi a b
-                            | Bool a, Bool b -> binop_bool bi a b
-                            | _ -> raise (EvalError "Type Error"))
-    | Conditional (e1, e2, e3) -> (match eval e1 env with
-                                   | Bool b -> if b then eval e2 env else eval e3 env
-                                   | _ -> raise (EvalError "Expression of type bool was expected"))
-    | Let (v, e1, e2) -> eval e2 (extend env v (ref (Val (eval e1 env))))
-    | Letrec (v, e1, e2) -> let env' = extend env v (ref (Val Unassigned)) in
-                            let e1' = eval e1 env' in
-                            let env'' = extend env' v (ref (Val e1')) in
-                            eval e2 env''
-    | App (e1, e2) -> (match eval e1 env with
-                       | Fun (v, e) -> eval e (extend env v (ref (Val (eval e2 env))))
-                       | _ -> raise (EvalError "Nonfunction cannot be applied"))
-    | Num _ | Bool _ | Fun _ | Raise | Unassigned -> eval_c exp
-  in Val (eval exp env) ;;
-
+let eval_l = eval false false ;;
 
 (* Connecting the evaluators to the external world. The REPL in
    miniml.ml uses a call to the single function evaluate defined
-   here. Initially, evaluate is the trivial evaluator eval_t. But you
-   can define it to use any of the other evaluators as you proceed to
-   implement them. (We will directly unit test the four evaluators
-   above, not the evaluate function, so it doesn't matter how it's set
-   when you submit your solution.) *)
+   here. *)
 
-let evaluate = eval_d ;;
+let evaluate = eval_l ;;

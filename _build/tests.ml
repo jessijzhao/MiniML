@@ -58,11 +58,13 @@ let test_exp_to_abstract_string () =
   assert(etas bit = "Binop(Times, Num 3, Var x)") ;
   assert(etas bie = "Binop(Equals, Var x, Num 2)") ;
   assert(etas bil = "Binop(LessThan, Var x, Num 7)") ;
-  assert(etas co = "Conditional(Binop(Equals, Var x, Num 7), Bool true, Var y)") ;
+  assert(etas co =
+    "Conditional(Binop(Equals, Var x, Num 7), Bool true, Var y)") ;
   assert(etas fu = "Fun(x, Binop(Plus, Var x, Var x))") ;
   assert(etas le = "Let(x, Num 1, Binop(Plus, Var x, Var x))") ;
   assert(etas re = "Letrec(x, Fun(y, Var x), Var x)") ;
-  assert(etas ap = "Let(d, Fun(x, Binop(Times, Num 2, Var x)), App(Var d, Num 3))") ;
+  assert(etas ap =
+    "Let(d, Fun(x, Binop(Times, Num 2, Var x)), App(Var d, Num 3))") ;
   assert(etas Raise = "Raise ") ;
   assert(etas Unassigned = "Unassigned") ;;
 
@@ -116,25 +118,7 @@ let test_subst () =
 
 (* TESTS FOR FUNCTIONS IN EVALUATION *)
 
-(* test expressions for all paths in evaluations *)
-let nu = ("1;;", "1;;") ;;
-let bo = ("true;;", "true;;") ;;
-let un = ("~-(~-3);;", "3;;") ;;
-let bi = ("~-(2 - 10);;", "8;;") ;;
-let bi' = ("true=false;;", "false;;")
-let co = ("if 2 = 7 then true else false;;", "false;;") ;;
-let fu = ("fun x -> x + x;;", "fun x -> x + x;;") ;;
-let le = ("let x = 1 in x + x;;", "2;;") ;;
-let le' = ("let f = fun x -> x in f f 3;;", "3;;") ;;
-let re = ("let rec f = fun x -> if x=0 then 1 else x*f(x-1) in f 4;;", "24;;");;
-let re' = ("let rec f = fun x -> if x=0 then x else f(x-1) in f 2 ;;", "0;;") ;;
-let ap = ("let double = fun x -> 2 * x in double (double 3);;", "12;;") ;;
-let e = ("let square = fun x -> x * x in let y = 3 in square y;;", "9;;") ;;
-let e1 = ("let i=fun x->x in let s=fun x->x*x in let y=3 in i s y;;", "9;;") ;;
-let exp = "let x = 1 in let f = fun y -> x + y in let x = 2 in f 3;;" ;;
-let lex = (exp, "4;;") ;;
-let dyn = (exp, "5;;") ;;
-
+(* testing all functionalities of the env module *)
 let test_env_module () =
   let open Env in
   (* some values for testing *)
@@ -165,10 +149,32 @@ let test_env_module () =
   assert(vts two = "Val(2)") ;
   assert(vts y = "Val(y)") ;
   assert(vts closure = "Closure(x, [])") ;
-  assert(ets env = "x -> Val(1), x2 -> Val(2), x3 -> Val(3), x4 -> Closure(x, []), []") ;;
+  assert(ets env =
+    "x -> Val(1), x2 -> Val(2), x3 -> Val(3), x4 -> Closure(x, []), []") ;;
 
+(* test expressions for all paths in evaluations *)
+let nu = ("1;;", "1;;") ;;
+let bo = ("true;;", "true;;") ;;
+let un = ("~-(~-3);;", "3;;") ;;
+let bi = ("~-(2 - 10);;", "8;;") ;;
+let bi' = ("true=false;;", "false;;")
+let co = ("if 2 = 7 then true else false;;", "false;;") ;;
+let fu = ("fun x -> x + x;;", "fun x -> x + x;;") ;;
+let fu' = ste "fun x -> x + x;;" ;;
+let fu'' = "Closure(fun x -> x + x, [])" ;;
+let le = ("let x = 1 in x + x;;", "2;;") ;;
+let le' = ("let f = fun x -> x in f f 3;;", "3;;") ;;
+let re = ("let rec f = fun x -> if x=0 then 1 else x*f(x-1) in f 4;;", "24;;");;
+let re' = ("let rec f = fun x -> if x=0 then x else f(x-1) in f 2 ;;", "0;;") ;;
+let ap = ("let double = fun x -> 2 * x in double (double 3);;", "12;;") ;;
+let e = ("let square = fun x -> x * x in let y = 3 in square y;;", "9;;") ;;
+let e1 = ("let i=fun x->x in let s=fun x->x*x in let y=3 in i s y;;", "9;;") ;;
+let exp = "let x = 1 in let f = fun y -> x + y in let x = 2 in f 3;;" ;;
+let lex = (exp, "4;;") ;;
+let dyn = (exp, "5;;") ;;
 
-let test_eval eval dynamic =
+(* testst the eval function it is called with as dynamic or lexical scope *)
+let test_eval eval dynamic lexical =
   let test_e (str : string * string) : bool =
     let env = Env.create () in
     match str with
@@ -178,8 +184,7 @@ let test_eval eval dynamic =
     try
       eval exp env = Env.Val (ste "let x = 2 in x;;")
     with
-      EvalError _ | EvalException-> true
-  in
+      EvalError _ | EvalException-> true in
   assert(test_error (ste "x;;")) ;
   assert(test_error (ste "3 + x;;")) ;
   assert(test_error (ste "true + false;;")) ;
@@ -192,7 +197,8 @@ let test_eval eval dynamic =
   assert(test_e bi) ;
   assert(test_e bi') ;
   assert(test_e co) ;
-  assert(test_e fu) ;
+  if not lexical then assert(test_e fu)
+  else assert(Env.value_to_string (eval fu' (Env.create ())) = fu'') ;
   assert(test_e le) ;
   assert(test_e le') ;
   assert(test_e re) ;
@@ -202,7 +208,6 @@ let test_eval eval dynamic =
   if dynamic then assert(test_e dyn)
   else assert(test_e lex) ;;
 
-
 (* run all tests *)
 let run_tests () =
   test_exp_to_concrete_string () ;
@@ -211,9 +216,9 @@ let run_tests () =
   test_new_varname () ;
   test_subst () ;
   test_env_module () ;
-  test_eval eval_s false ;
-  test_eval eval_d true ;
-  test_eval eval_l false ;
+  test_eval eval_s false false ;
+  test_eval eval_d true false ;
+  test_eval eval_l false true ;
   () ;;
 
 let _ = run_tests () ;;
