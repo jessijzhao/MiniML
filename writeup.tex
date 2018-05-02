@@ -16,6 +16,7 @@
 \usepackage{listings}
 \usepackage{common}
 \usepackage{float}
+\usepackage{graphicx}
 \usepackage[mmddyyyy,hhmmss]{datetime}
 \usepackage{color}
 \definecolor{dkgreen}{rgb}{0,0.6,0}
@@ -133,8 +134,20 @@ In particular, there are only 2 different cases between eval\_d and eval\_l show
 										  | _ -> oops "Nonfunction ccannot be applied")
     ;;
 	\end{lstlisting}
-	
 \end{itemize}
+
+\subsection*{Demonstration}
+When evaluate is set to eval\_d:
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=300 pt]{dynamic}
+\end{figure}
+
+When evaluate is set to eval\_l:
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=300 pt]{lexical}
+\end{figure}
 
 
 

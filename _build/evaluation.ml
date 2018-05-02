@@ -154,7 +154,7 @@ let rec evaluate (substitution : bool)
   | Conditional (i, t, e) ->
      (match eval_to_exp i with
       | Bool cond -> if cond then eval' t else eval' e
-      | _ -> raise (EvalError "Condition must be of type bool"))
+      | _ -> raise (EvalError "Condition of type bool expected "))
   | Fun _ -> if substitution || dynamic then Val exp
              else close exp env
   | Let (x, def, body) -> if substitution then
@@ -191,7 +191,7 @@ let rec evaluate (substitution : bool)
                       (match eval' f with
                        | Closure (Fun (x, def), env') ->
                             eval def (extend env' x (ref (eval' app)))
-                       | _ -> oops "Nonfunction ccannot be applied");;
+                       | _ -> oops "Nonfunction ccannot be applied") ;;
 
 (* The SUBSTITUTION MODEL evaluator *)
 let eval_s = evaluate true true ;;
@@ -206,4 +206,4 @@ let eval_l = evaluate false false ;;
    miniml.ml uses a call to the single function evaluate defined
    here. *)
 
-let evaluate = eval_s ;;
+let evaluate = eval_d ;;

@@ -152,7 +152,8 @@ let test_env_module () =
   assert(ets env =
     "x -> Val(1), x2 -> Val(2), x3 -> Val(3), x4 -> Closure(x, []), []") ;;
 
-(* test expressions for all paths in evaluations *)
+(* test expressions for all paths in evaluations -- some of these taken from
+   lecture slides *)
 let nu = ("1;;", "1;;") ;;
 let bo = ("true;;", "true;;") ;;
 let un = ("~-(~-3);;", "3;;") ;;
@@ -169,7 +170,7 @@ let re = ("let rec f = fun x-> if x=0 then 1 else x*f(x-1) in f 4;;", "24;;") ;;
 let re' = ("let rec f = fun x-> if x=0 then x else f(x-1) in f 2 ;;", "0;;") ;;
 let re'' = ("let rec f=(fun x->if x=0 then 0 else 1+f (x-1)) in f 1;;","1;;") ;;
 let ap = ("let double = fun x -> 2 * x in double (double 3);;", "12;;") ;;
-let ra = ("if 3 < 4 then true else true;;")
+let ra = ("if 3 < 4 then raise else true;;")
 let e = ("let square = fun x -> x * x in let y = 3 in square y;;", "9;;") ;;
 let e1 = ("let i=fun x->x in let s=fun x->x*x in let y=3 in i s y;;", "9;;") ;;
 let exp = "let x = 1 in let f = fun y -> x + y in let x = 2 in f 3;;" ;;

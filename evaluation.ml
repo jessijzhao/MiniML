@@ -206,4 +206,4 @@ let eval_l = evaluate false false ;;
    miniml.ml uses a call to the single function evaluate defined
    here. *)
 
-let evaluate = eval_s ;;
+let evaluate = eval_d ;;
